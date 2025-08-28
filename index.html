@@ -409,14 +409,17 @@
             storyIds.push(...showIds.slice(0, 200));
             storyIds.push(...newIds.slice(0, 300));
             
+            // Remove duplicates since posts can appear in multiple lists
+            const uniqueStoryIds = [...new Set(storyIds)];
+            
             updateProgress(10);
             
             // 2. Fetch stories in batches (to avoid overwhelming the browser)
             const batchSize = 20;  // Smaller batches for browser
             const stories = [];
             
-            for (let i = 0; i < storyIds.length; i += batchSize) {
-                const batch = storyIds.slice(i, i + batchSize);
+            for (let i = 0; i < uniqueStoryIds.length; i += batchSize) {
+                const batch = uniqueStoryIds.slice(i, i + batchSize);
                 const batchStories = await Promise.all(
                     batch.map(id => 
                         fetch(`${HN_API}/item/${id}.json`)
@@ -427,7 +430,7 @@
                 stories.push(...batchStories.filter(Boolean));
                 
                 // Update progress
-                updateProgress(10 + (i / storyIds.length * 80));
+                updateProgress(10 + (i / uniqueStoryIds.length * 80));
             }
             
             // 3. Filter in real-time
