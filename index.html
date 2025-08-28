@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HN Overlooked Posts</title>
+    <style>
+        body {
+            font-family: Verdana, Geneva, sans-serif;
+            font-size: 13px;
+            margin: 0;
+            padding: 20px;
+            background: #f6f6ef;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: #ff6600;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        
+        .filters {
+            background: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }
+        
+        .filter-row {
+            margin-bottom: 10px;
+        }
+        
+        label {
+            display: inline-block;
+            width: 150px;
+        }
+        
+        input[type="range"] {
+            width: 200px;
+        }
+        
+        .post {
+            background: white;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        
+        .post-title {
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .post-meta {
+            color: #828282;
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+        
+        .post-text {
+            margin-top: 8px;
+            line-height: 1.4;
+        }
+        
+        .passion-score {
+            display: inline-block;
+            background: #ff6600;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #828282;
+        }
+        
+        button {
+            background: #ff6600;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        
+        button:hover {
+            background: #ff8833;
+        }
+        
+        .stats {
+            color: #828282;
+            margin-bottom: 10px;
+            font-size: 11px;
+        }
+        
+        .pagination {
+            text-align: center;
+            margin: 20px 0;
+            padding: 10px;
+            background: white;
+            border: 1px solid #ddd;
+        }
+        
+        .pagination button {
+            margin: 0 2px;
+            padding: 5px 10px;
+            background: #f6f6ef;
+            color: #333;
+            border: 1px solid #ddd;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .pagination button:hover:not(:disabled) {
+            background: #ff6600;
+            color: white;
+        }
+        
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .pagination button.active {
+            background: #ff6600;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .pagination .page-info {
+            display: inline-block;
+            margin: 0 10px;
+            color: #828282;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>HN Overlooked Posts - Find Hidden Gems</h1>
+        </div>
+        
+        <div class="filters">
+            <div class="filter-row">
+                <label>Hours ago:</label>
+                <input type="range" id="hours" min="24" max="720" value="168">
+                <span id="hours-value">168</span> hours (7 days)
+            </div>
+            
+            <div class="filter-row">
+                <label>Min text length:</label>
+                <input type="range" id="minLength" min="100" max="5000" step="100" value="500">
+                <span id="length-value">500</span> characters
+            </div>
+            
+            <div class="filter-row">
+                <label>Max votes:</label>
+                <input type="range" id="maxVotes" min="0" max="100" value="50">
+                <span id="votes-value">50</span>
+            </div>
+            
+            <div class="filter-row">
+                <label>Max comments:</label>
+                <input type="range" id="maxComments" min="0" max="50" value="10">
+                <span id="comments-value">10</span>
+            </div>
+            
+            <div class="filter-row">
+                <label>Sort by:</label>
+                <select id="sortBy">
+                    <option value="passion_score">Passion Score</option>
+                    <option value="length">Text Length</option>
+                    <option value="date">Date (newest)</option>
+                    <option value="votes">Votes (lowest)</option>
+                </select>
+            </div>
+            
+            <div class="filter-row">
+                <button onclick="search()">Find Overlooked Posts</button>
+            </div>
+        </div>
+        
+        <div class="stats" id="stats"></div>
+        <div id="pagination-top" class="pagination" style="display: none;"></div>
+        <div id="results"></div>
+        <div id="pagination-bottom" class="pagination" style="display: none;"></div>
+    </div>
+    
+    <script>
+        // Update slider displays
+        document.getElementById('hours').oninput = function() {
+            const days = Math.round(this.value / 24);
+            document.getElementById('hours-value').textContent = 
+                this.value + ' hours (' + days + ' days)';
+        };
+        
+        document.getElementById('minLength').oninput = function() {
+            document.getElementById('length-value').textContent = this.value;
+        };
+        
+        document.getElementById('maxVotes').oninput = function() {
+            document.getElementById('votes-value').textContent = this.value;
+        };
+        
+        document.getElementById('maxComments').oninput = function() {
+            document.getElementById('comments-value').textContent = this.value;
+        };
+        
+        const HN_API = 'https://hacker-news.firebaseio.com/v0';
+        
+        // Pagination state
+        let allPosts = [];
+        let currentPage = 1;
+        const ITEMS_PER_PAGE = 10;
+        
+        function updateProgress(percent) {
+            const progressDiv = document.getElementById('progress');
+            if (progressDiv) {
+                progressDiv.style.width = percent + '%';
+            }
+        }
+        
+        async function findOverlookedPosts(params) {
+            const posts = [];
+            
+            // 1. Fetch story IDs from multiple sources
+            const storyIds = [];
+            
+            updateProgress(5);
+            
+            // Always fetch from all sources
+            const [askIds, showIds, newIds] = await Promise.all([
+                fetch(`${HN_API}/askstories.json`).then(r => r.json()),
+                fetch(`${HN_API}/showstories.json`).then(r => r.json()),
+                fetch(`${HN_API}/newstories.json`).then(r => r.json())
+            ]);
+            
+            storyIds.push(...askIds.slice(0, 200));
+            storyIds.push(...showIds.slice(0, 200));
+            storyIds.push(...newIds.slice(0, 300));
+            
+            updateProgress(10);
+            
+            // 2. Fetch stories in batches (to avoid overwhelming the browser)
+            const batchSize = 20;  // Smaller batches for browser
+            const stories = [];
+            
+            for (let i = 0; i < storyIds.length; i += batchSize) {
+                const batch = storyIds.slice(i, i + batchSize);
+                const batchStories = await Promise.all(
+                    batch.map(id => 
+                        fetch(`${HN_API}/item/${id}.json`)
+                            .then(r => r.json())
+                            .catch(() => null)
+                    )
+                );
+                stories.push(...batchStories.filter(Boolean));
+                
+                // Update progress
+                updateProgress(10 + (i / storyIds.length * 80));
+            }
+            
+            // 3. Filter in real-time
+            const cutoffTime = Date.now() / 1000 - (params.hoursAgo * 3600);
+            const overlooked = [];
+            
+            for (const story of stories) {
+                if (!story?.text) continue;
+                if (story.time < cutoffTime) continue;
+                if ((story.score || 0) > params.maxVotes) continue;
+                if ((story.descendants || 0) > params.maxComments) continue;
+                
+                // Clean HTML and measure text
+                const cleanText = story.text.replace(/<[^>]*>/g, '');
+                const textLength = cleanText.length;
+                
+                if (textLength < params.minLength) continue;
+                
+                // Add calculated fields
+                story.textLength = textLength;
+                story.cleanText = cleanText.substring(0, 500);
+                story.passionScore = calculatePassionScore(story);
+                
+                overlooked.push(story);
+            }
+            
+            // 4. Sort and limit
+            overlooked.sort((a, b) => {
+                switch (params.sortBy) {
+                    case 'passion_score': return b.passionScore - a.passionScore;
+                    case 'length': return b.textLength - a.textLength;
+                    case 'date': return b.time - a.time;
+                    case 'votes': return a.score - b.score;
+                    default: return b.passionScore - a.passionScore;
+                }
+            });
+            
+            updateProgress(100);
+            
+            return {
+                posts: overlooked,  // Return all posts, not limited
+                totalScanned: stories.length,
+                totalMatched: overlooked.length
+            };
+        }
+        
+        function calculatePassionScore(post) {
+            const textLength = post.textLength || 0;
+            const score = Math.max(post.score || 0, 1);
+            const comments = post.descendants || 0;
+            
+            const lengthScore = Math.min(textLength / 500, 10);
+            const engagement = score + (comments * 2);
+            
+            return engagement === 0 ? lengthScore * 100 : (lengthScore / engagement) * 100;
+        }
+        
+        async function search() {
+            const resultsDiv = document.getElementById('results');
+            const statsDiv = document.getElementById('stats');
+            
+            resultsDiv.innerHTML = '<div class="loading">Searching Hacker News...<div style="background:#ff6600;height:4px;width:0%;transition:width 0.3s" id="progress"></div></div>';
+            statsDiv.innerHTML = '';
+            
+            const startTime = Date.now();
+            
+            // Build parameters
+            const params = {
+                hoursAgo: parseInt(document.getElementById('hours').value),
+                minLength: parseInt(document.getElementById('minLength').value),
+                maxVotes: parseInt(document.getElementById('maxVotes').value),
+                maxComments: parseInt(document.getElementById('maxComments').value),
+                sortBy: document.getElementById('sortBy').value
+            };
+            
+            try {
+                const data = await findOverlookedPosts(params);
+                const searchTime = ((Date.now() - startTime) / 1000).toFixed(1);
+                
+                // Update stats
+                statsDiv.innerHTML = `Found ${data.totalMatched} overlooked posts out of ${data.totalScanned} scanned (${searchTime}s)`;
+                
+                // Display results
+                if (data.posts.length === 0) {
+                    resultsDiv.innerHTML = '<div class="loading">No overlooked posts found. Try adjusting filters.</div>';
+                    document.getElementById('pagination-top').style.display = 'none';
+                    document.getElementById('pagination-bottom').style.display = 'none';
+                    return;
+                }
+                
+                // Store posts and reset to page 1
+                allPosts = data.posts;
+                currentPage = 1;
+                
+                // Display current page
+                displayPage();
+                
+            } catch (error) {
+                resultsDiv.innerHTML = '<div class="loading">Error searching. Please try again.</div>';
+                console.error('Search error:', error);
+            }
+        }
+        
+        function displayPage() {
+            const resultsDiv = document.getElementById('results');
+            const totalPages = Math.ceil(allPosts.length / ITEMS_PER_PAGE);
+            
+            // Calculate page bounds
+            const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+            const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, allPosts.length);
+            const pagePosts = allPosts.slice(startIndex, endIndex);
+            
+            // Display posts for current page
+            resultsDiv.innerHTML = pagePosts.map(post => {
+                const date = new Date(post.time * 1000);
+                const timeAgo = getTimeAgo(date);
+                
+                return `
+                    <div class="post">
+                        <div class="post-title">
+                            <a href="https://news.ycombinator.com/item?id=${post.id}" target="_blank">
+                                ${post.title || 'Untitled'}
+                            </a>
+                        </div>
+                        <div class="post-meta">
+                            <span class="passion-score">Passion: ${post.passionScore.toFixed(1)}</span>
+                            ${post.score} points | ${post.descendants || 0} comments | 
+                            ${post.textLength} chars | 
+                            by ${post.by} | ${timeAgo}
+                        </div>
+                        <div class="post-text">
+                            ${post.cleanText}...
+                            <a href="https://news.ycombinator.com/item?id=${post.id}" target="_blank">
+                                [read more]
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Update pagination controls
+            updatePaginationControls();
+        }
+        
+        function updatePaginationControls() {
+            const totalPages = Math.ceil(allPosts.length / ITEMS_PER_PAGE);
+            
+            if (totalPages <= 1) {
+                document.getElementById('pagination-top').style.display = 'none';
+                document.getElementById('pagination-bottom').style.display = 'none';
+                return;
+            }
+            
+            let paginationHTML = '';
+            
+            // Previous button
+            paginationHTML += `<button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>← Previous</button>`;
+            
+            // Page numbers
+            const maxButtons = 9; // Maximum number of page buttons to show
+            let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+            let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+            
+            // Adjust start if we're near the end
+            if (endPage - startPage < maxButtons - 1) {
+                startPage = Math.max(1, endPage - maxButtons + 1);
+            }
+            
+            // First page if not visible
+            if (startPage > 1) {
+                paginationHTML += `<button onclick="goToPage(1)">1</button>`;
+                if (startPage > 2) {
+                    paginationHTML += `<span style="margin: 0 5px;">...</span>`;
+                }
+            }
+            
+            // Page buttons
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHTML += `<button onclick="goToPage(${i})" class="${i === currentPage ? 'active' : ''}">${i}</button>`;
+            }
+            
+            // Last page if not visible
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    paginationHTML += `<span style="margin: 0 5px;">...</span>`;
+                }
+                paginationHTML += `<button onclick="goToPage(${totalPages})">${totalPages}</button>`;
+            }
+            
+            // Next button
+            paginationHTML += `<button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next →</button>`;
+            
+            // Page info
+            const startItem = (currentPage - 1) * ITEMS_PER_PAGE + 1;
+            const endItem = Math.min(currentPage * ITEMS_PER_PAGE, allPosts.length);
+            paginationHTML += `<span class="page-info">Showing ${startItem}-${endItem} of ${allPosts.length}</span>`;
+            
+            // Update both pagination divs
+            document.getElementById('pagination-top').innerHTML = paginationHTML;
+            document.getElementById('pagination-top').style.display = 'block';
+            document.getElementById('pagination-bottom').innerHTML = paginationHTML;
+            document.getElementById('pagination-bottom').style.display = 'block';
+        }
+        
+        function goToPage(page) {
+            const totalPages = Math.ceil(allPosts.length / ITEMS_PER_PAGE);
+            if (page < 1 || page > totalPages) return;
+            
+            currentPage = page;
+            displayPage();
+            
+            // Scroll to top of results
+            document.getElementById('stats').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function getTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            const intervals = [
+                { label: 'year', seconds: 31536000 },
+                { label: 'month', seconds: 2592000 },
+                { label: 'day', seconds: 86400 },
+                { label: 'hour', seconds: 3600 },
+                { label: 'minute', seconds: 60 }
+            ];
+            
+            for (const interval of intervals) {
+                const count = Math.floor(seconds / interval.seconds);
+                if (count >= 1) {
+                    return count + ' ' + interval.label + (count > 1 ? 's' : '') + ' ago';
+                }
+            }
+            return 'just now';
+        }
+        
+        // Load on page load
+        window.onload = function() {
+            search();
+        };
+    </script>
+</body>
+</html>
