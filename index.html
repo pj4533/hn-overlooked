@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HN Overlooked Posts</title>
+    <title>HN Overlooked Recent Posts</title>
     <style>
         body {
             font-family: Verdana, Geneva, sans-serif;
@@ -284,20 +284,13 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>HN Overlooked Posts - Find Hidden Gems</h1>
+            <h1>HN Overlooked Posts - Find Recent Hidden Gems</h1>
             <div class="header-right">
-                <span>Sorted by Passion Score</span>
-                <button class="info-btn" onclick="showPassionModal()" title="What is Passion Score?">?</button>
+                <button class="info-btn" onclick="showPassionModal()" title="About this tool">?</button>
             </div>
         </div>
         
         <div class="filters">
-            <div class="filter-row">
-                <label>Hours ago:</label>
-                <input type="range" id="hours" min="24" max="720" value="168">
-                <span id="hours-value">168</span> hours (7 days)
-            </div>
-            
             <div class="filter-row">
                 <label>Min text length:</label>
                 <input type="range" id="minLength" min="100" max="5000" step="100" value="500">
@@ -331,11 +324,17 @@
     <div id="passionModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Understanding Passion Score</h2>
+                <h2>About HN Overlooked</h2>
                 <button class="close" onclick="closePassionModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <p>The <strong>Passion Score</strong> helps identify posts where authors invested significant effort writing detailed content, but received minimal community engagement.</p>
+                <p>This tool helps you discover <strong>recent hidden gems</strong> on Hacker News – high-effort posts that haven't gotten much attention.</p>
+                
+                <h3 style="font-size: 14px; margin-top: 15px;">Why "Recent"?</h3>
+                <p>We search the HN API's Ask, Show, and New story feeds, which typically contain posts from the last 3-7 days. This ensures fresh content while keeping the search fast.</p>
+                
+                <h3 style="font-size: 14px; margin-top: 15px;">Passion Score</h3>
+                <p>Posts are ranked by their <strong>Passion Score</strong>, which identifies high-effort, low-engagement content:</p>
                 
                 <div class="formula">
                     Passion Score = (Text Length Score) / (Engagement + 1)
@@ -345,25 +344,13 @@
                     <br>• Engagement = votes + (comments × 2)
                 </div>
                 
-                <p>A higher score indicates more "overlooked" content – posts with substantial text but low engagement.</p>
-                
-                <div class="example">
-                    <strong>Example:</strong> A 2,500-character post with only 3 votes and 1 comment would have a high passion score (indicating high effort, low recognition), while a 500-character post with 50 votes would have a low score.
-                </div>
-                
-                <p>This metric helps surface thoughtful, detailed contributions that may have been posted at the wrong time or simply missed by the community.</p>
+                <p>Higher scores indicate more "overlooked" posts – substantial writing with minimal recognition. Perfect for finding thoughtful contributions that the community may have missed.</p>
             </div>
         </div>
     </div>
     
     <script>
         // Update slider displays
-        document.getElementById('hours').oninput = function() {
-            const days = Math.round(this.value / 24);
-            document.getElementById('hours-value').textContent = 
-                this.value + ' hours (' + days + ' days)';
-        };
-        
         document.getElementById('minLength').oninput = function() {
             document.getElementById('length-value').textContent = this.value;
         };
@@ -434,12 +421,10 @@
             }
             
             // 3. Filter in real-time
-            const cutoffTime = Date.now() / 1000 - (params.hoursAgo * 3600);
             const overlooked = [];
             
             for (const story of stories) {
                 if (!story?.text) continue;
-                if (story.time < cutoffTime) continue;
                 if ((story.score || 0) > params.maxVotes) continue;
                 if ((story.descendants || 0) > params.maxComments) continue;
                 
@@ -491,7 +476,6 @@
             
             // Build parameters
             const params = {
-                hoursAgo: parseInt(document.getElementById('hours').value),
                 minLength: parseInt(document.getElementById('minLength').value),
                 maxVotes: parseInt(document.getElementById('maxVotes').value),
                 maxComments: parseInt(document.getElementById('maxComments').value)
