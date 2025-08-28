@@ -26,7 +26,7 @@ Posts are ranked by their Passion Score, which measures the ratio between author
 
 ## Try It Out
 
-Visit the live site: [Coming soon - GitHub Pages URL]
+Visit the live site: https://pj4533.com/hn-overlooked/
 
 Or run it locally by opening `index.html` in your browser. That's it – no build process, no dependencies.
 
